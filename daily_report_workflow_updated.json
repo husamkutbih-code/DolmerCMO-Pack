@@ -1,0 +1,361 @@
+{
+  "name": "Daily Report Workflow - Dolmer CMO Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "hours": {
+                "hours": [
+                  8
+                ],
+                "mode": "every"
+              }
+            }
+          ]
+        },
+        "options": {
+          "timezone": "Asia/Riyadh"
+        }
+      },
+      "id": "cron-trigger-001",
+      "name": "Daily Cron Trigger",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "data",
+        "fileName": "/mock_data/deliverect_sales_2025-10.csv"
+      },
+      "id": "read-deliverect-001",
+      "name": "Read Deliverect Sales Data",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "data",
+        "fileName": "/mock_data/marn_pos_2025-10.csv"
+      },
+      "id": "read-marn-pos-001",
+      "name": "Read Marn POS Data",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [200, 100]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "data",
+        "fileName": "/mock_data/snapchat_insights_week.json"
+      },
+      "id": "read-snapchat-001",
+      "name": "Read Snapchat Insights",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [200, 200]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "data",
+        "fileName": "/mock_data/tiktok_insights_week.json"
+      },
+      "id": "read-tiktok-001",
+      "name": "Read TikTok Insights",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Unify KPIs and calculate metrics\nconst deliverectData = $input.first().json.data;\nconst marnData = $input.all()[1].json.data;\nconst snapchatData = $input.all()[2].json.data;\nconst tiktokData = $input.all()[3].json.data;\n\n// Calculate KPIs\nconst totalOrders = deliverectData.orders + marnData.orders;\nconst netSales = deliverectData.revenue + marnData.revenue;\nconst aov = netSales / totalOrders;\nconst adSpend = snapchatData.adSpend + tiktokData.adSpend;\nconst cpa = adSpend / totalOrders;\nconst roas = netSales / adSpend;\n\nreturn {\n  kpis: {\n    totalOrders,\n    netSales,\n    aov: Math.round(aov * 100) / 100,\n    adSpend,\n    cpa: Math.round(cpa * 100) / 100,\n    roas: Math.round(roas * 100) / 100\n  },\n  deliverectData,\n  marnData,\n  snapchatData,\n  tiktokData,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "unify-kpis-001",
+      "name": "Unify KPIs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [400, 150]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 1000
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a Sales Analyst AI. Analyze the provided sales data and KPIs to identify trends, anomalies, and key performance insights. Focus on revenue patterns, order volumes, and customer behavior."
+          },
+          {
+            "role": "user",
+            "content": "Analyze today's sales performance: {{ $json.kpis }}"
+          }
+        ]
+      },
+      "id": "analyst-agent-001",
+      "name": "AnalystAgent",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [600, 0],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credential-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.4,
+          "maxTokens": 800
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a Campaign Manager AI. Analyze ad performance data and provide optimization recommendations for Snapchat and TikTok campaigns based on ROAS, CPA, and engagement metrics."
+          },
+          {
+            "role": "user",
+            "content": "Campaign data: {{ $json.snapchatData }}, {{ $json.tiktokData }}. Current ROAS: {{ $json.kpis.roas }}, CPA: {{ $json.kpis.cpa }}"
+          }
+        ]
+      },
+      "id": "campaign-manager-001",
+      "name": "CampaignManager",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [600, 100],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credential-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 600
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a Learning Agent AI. Identify patterns, data gaps, and improvement opportunities from historical performance. Suggest process optimizations and data collection enhancements."
+          },
+          {
+            "role": "user",
+            "content": "Analyze patterns and gaps in: {{ $json }}"
+          }
+        ]
+      },
+      "id": "learning-agent-001",
+      "name": "LearningAgent",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [600, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credential-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 1500
+        },
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are the CMO of Dolmer. Synthesize insights from all analyst reports into a comprehensive executive summary. Create actionable recommendations and strategic guidance for the leadership team."
+          },
+          {
+            "role": "user",
+            "content": "Sales Analysis: {{ $input.all()[0].json }}\nCampaign Analysis: {{ $input.all()[1].json }}\nLearning Insights: {{ $input.all()[2].json }}\n\nCreate executive summary with key metrics, insights, and 3-5 actionable recommendations."
+          }
+        ]
+      },
+      "id": "cmo-final-001",
+      "name": "CMO_Final",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [800, 150],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credential-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "exec@dolmer.sa",
+        "subject": "Dolmer Daily Performance Report - {{ $('Daily Cron Trigger').first().json.timestamp }}",
+        "text": "Please find attached the daily performance report.",
+        "html": "<html><body><h1>Dolmer Daily Performance Report</h1><div>{{ $('CMO_Final').first().json.choices[0].message.content }}</div></body></html>"
+      },
+      "id": "email-node-001",
+      "name": "Send Daily Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1000, 150],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-credential-id"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Deliverect Sales Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Marn POS Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Snapchat Insights",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read TikTok Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Deliverect Sales Data": {
+      "main": [
+        [
+          {
+            "node": "Unify KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Marn POS Data": {
+      "main": [
+        [
+          {
+            "node": "Unify KPIs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Read Snapchat Insights": {
+      "main": [
+        [
+          {
+            "node": "Unify KPIs",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Read TikTok Insights": {
+      "main": [
+        [
+          {
+            "node": "Unify KPIs",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Unify KPIs": {
+      "main": [
+        [
+          {
+            "node": "AnalystAgent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CampaignManager",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LearningAgent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AnalystAgent": {
+      "main": [
+        [
+          {
+            "node": "CMO_Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CampaignManager": {
+      "main": [
+        [
+          {
+            "node": "CMO_Final",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "LearningAgent": {
+      "main": [
+        [
+          {
+            "node": "CMO_Final",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "CMO_Final": {
+      "main": [
+        [
+          {
+            "node": "Send Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "pinData": {},
+  "versionId": "daily-report-v1-2025"
+}
